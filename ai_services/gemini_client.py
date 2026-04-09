@@ -2,7 +2,7 @@ import logging
 from typing import Optional
 
 from google import genai
-from google.api_core.exceptions import ResourceExhausted
+from google.genai.errors import APIError, ClientError  
 from django.conf import settings
 from tenacity import (
     retry,
@@ -31,8 +31,16 @@ def _is_retryable(exc: BaseException) -> bool:
     """Only retry on transient errors, never on quota/auth errors."""
     if isinstance(exc, GeminiClientError):
         return False
-    if isinstance(exc, ResourceExhausted):
-        return False  # 429 quota — no point retrying
+
+    # Handle google-genai errors
+    if isinstance(exc, (APIError, ClientError)):
+        # 429 = RESOURCE_EXHAUSTED (quota/rate limit) — do NOT retry
+        if getattr(exc, "code", None) == 429 or getattr(exc, "status_code", None) == 429:
+            return False
+        if getattr(exc, "code", None) in {401, 403}:
+            return False
+
+    # Retry other transient errors (network, 5xx, etc.)
     return True
 
 
@@ -69,7 +77,7 @@ class GeminiClient:
 
             text = getattr(response, "text", None)
 
-            # fallback (some responses use candidates structure)
+            # fallback for candidates structure
             if not text and hasattr(response, "candidates"):
                 try:
                     text = response.candidates[0].content.parts[0].text
@@ -82,7 +90,10 @@ class GeminiClient:
             logger.info("Gemini response received [length=%d]", len(text))
             return text.strip()
 
-        except (GeminiClientError, ResourceExhausted):
+        except (GeminiClientError, APIError, ClientError) as exc:
+            # Re-raise quota and client errors without wrapping
+            if isinstance(exc, (APIError, ClientError)) and getattr(exc, "code", None) == 429:
+                logger.warning("Gemini quota exceeded (429)")
             raise
         except Exception as exc:
             logger.exception("Gemini API call failed: %s", exc)

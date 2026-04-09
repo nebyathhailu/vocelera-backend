@@ -2,7 +2,6 @@ import logging
 from typing import Optional
 
 from google import genai
-from google.genai.errors import APIError, ClientError  
 from django.conf import settings
 from tenacity import (
     retry,
@@ -32,15 +31,16 @@ def _is_retryable(exc: BaseException) -> bool:
     if isinstance(exc, GeminiClientError):
         return False
 
-    # Handle google-genai errors
-    if isinstance(exc, (APIError, ClientError)):
-        # 429 = RESOURCE_EXHAUSTED (quota/rate limit) — do NOT retry
-        if getattr(exc, "code", None) == 429 or getattr(exc, "status_code", None) == 429:
-            return False
-        if getattr(exc, "code", None) in {401, 403}:
-            return False
+    # Check for quota errors without importing at top level
+    exc_str = str(exc).upper()
+    if "429" in exc_str or "RESOURCE_EXHAUSTED" in exc_str:
+        logger.warning("Gemini quota/rate limit hit (429 RESOURCE_EXHAUSTED)")
+        return False
 
-    # Retry other transient errors (network, 5xx, etc.)
+    # Also catch common non-retryable auth/permission errors
+    if any(code in exc_str for code in ["401", "403", "UNAUTHENTICATED", "PERMISSION_DENIED"]):
+        return False
+
     return True
 
 
@@ -90,12 +90,13 @@ class GeminiClient:
             logger.info("Gemini response received [length=%d]", len(text))
             return text.strip()
 
-        except (GeminiClientError, APIError, ClientError) as exc:
-            # Re-raise quota and client errors without wrapping
-            if isinstance(exc, (APIError, ClientError)) and getattr(exc, "code", None) == 429:
-                logger.warning("Gemini quota exceeded (429)")
+        except GeminiClientError:
             raise
         except Exception as exc:
+            # Re-raise quota errors cleanly
+            if "429" in str(exc) or "RESOURCE_EXHAUSTED" in str(exc).upper():
+                logger.warning("Gemini quota exceeded")
+                raise
             logger.exception("Gemini API call failed: %s", exc)
             raise GeminiClientError(f"Gemini call failed: {exc}") from exc
 

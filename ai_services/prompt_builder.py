@@ -57,33 +57,66 @@ Respond ONLY in the following JSON format:
 """
 
 
-def build_draft_response_prompt(citizen_message: str, project_name: str) -> str:
+def build_draft_response_prompt(
+    citizen_message: str,
+    project_name: str,
+    citizen_name: str = "",
+    insights_context: list = None,
+) -> str:
     """
-    Build a prompt for drafting an AI response to a citizen message.
+    Build a prompt for drafting a meaningful, personalised response
+    to a citizen's WhatsApp feedback message.
 
-    Args:
-        citizen_message: The original message from the citizen.
-        project_name: The consultation project context.
-
-    Returns:
-        str: Prompt for generating a draft outgoing message.
+    The response must:
+    - Directly acknowledge the specific concern raised
+    - Show the government has understood the feedback
+    - Give a concrete next step or commitment (not vague promises)
+    - Be warm, human, and professional
+    - Be WhatsApp-appropriate (short paragraphs, no bullet points, no formal headers)
+    - Be 3-5 sentences maximum
     """
+    greeting = f"Dear {citizen_name}" if citizen_name else "Dear valued citizen"
+
+    insights_block = ""
+    if insights_context:
+        top = insights_context[:3]
+        lines = "\n".join(
+            f"- {i.get('theme', '')} (priority: {i.get('priority_score', 0):.0%}, sentiment: {i.get('sentiment', '')})"
+            for i in top
+        )
+        insights_block = f"""
+For additional context, here are the top themes emerging from the overall
+consultation so far:
+{lines}
+
+Use this context to make the response feel informed and connected to a
+broader effort — but keep the focus on the citizen's specific message.
+"""
+
     return f"""
-You are drafting a professional government response to a citizen who submitted feedback 
-as part of the "{project_name}" consultation.
+You are a professional government communications officer responding to a
+citizen who submitted feedback via WhatsApp as part of the
+"{project_name}" public consultation.
 
 Citizen's message:
 \"\"\"{citizen_message}\"\"\"
+{insights_block}
+Write a WhatsApp reply that:
+1. Opens with "{greeting}," then immediately acknowledges the SPECIFIC issue
+   they raised — name it directly, do not use generic language like
+   "your concern" or "your feedback".
+2. Confirms that their input has been recorded and will inform
+   decision-making — be specific about what kind of decision
+   (e.g. infrastructure planning, service delivery review, policy update).
+3. Gives ONE concrete next step the government is taking or will take
+   related to their specific concern. If you cannot be specific, state
+   a realistic timeline for a response or update.
+4. Closes with a genuine, warm sign-off that invites further engagement
+   if they have more to share.
 
-Your task:
-- Acknowledge the citizen's concern respectfully.
-- Provide a helpful, factual, and empathetic response.
-- Keep it concise (3-5 sentences max).
-- Use formal but accessible language.
-- Do NOT make promises on behalf of the government.
-- End with an invitation for further engagement.
-
-Return ONLY the draft message text, no additional commentary.
+Tone: professional but human. Like a real person wrote it, not a bot.
+Length: 3-5 sentences. No bullet points. No headers. No markdown.
+Return ONLY the message text. Nothing else.
 """
 
 

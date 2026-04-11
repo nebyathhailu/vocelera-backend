@@ -17,18 +17,24 @@ class DiscussionParticipantSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = DiscussionParticipant
-        fields = ["id", "discussion", "user", "role"]
+        fields = ["id", "user", "role"]
         read_only_fields = ["id", "user"]
 
 
 class DiscussionSerializer(serializers.ModelSerializer):
     created_by = UserSerializer(read_only=True)
     comments = CommentSerializer(many=True, read_only=True)
+    participants = DiscussionParticipantSerializer(many=True, read_only=True)
+    comment_count = serializers.SerializerMethodField()
 
     class Meta:
         model = Discussion
         fields = [
             "id", "project", "related_type", "related_id",
             "created_by", "created_at", "comments",
+            "participants", "comment_count",
         ]
         read_only_fields = ["id", "created_by", "created_at"]
+
+    def get_comment_count(self, obj):
+        return obj.comments.count()

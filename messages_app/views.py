@@ -1,6 +1,9 @@
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
+from django.shortcuts import get_object_or_404
+from projects.models import ProjectParticipant
+from collaboration.models import DiscussionParticipant
 from .serializers import MessageSerializer, CitizenSerializer, BulkMessageSerializer
 from .models import Message, Citizen
 from . import services
@@ -13,15 +16,35 @@ class CitizenViewSet(viewsets.ModelViewSet):
 
 class MessageViewSet(viewsets.ModelViewSet):
     serializer_class = MessageSerializer
-   
+
     def get_queryset(self):
         project_id = (
-            self.kwargs.get("project_pk") or
-            self.request.query_params.get("project_id") or
-            self.request.query_params.get("projects")  
+            self.kwargs.get("project_pk")
+            or self.request.query_params.get("project_id")
+            or self.request.query_params.get("projects")
         )
-        if project_id:
+        if not project_id:
+            return Message.objects.none()
+
+        user = self.request.user
+
+        # Full project members see all messages
+        if ProjectParticipant.objects.filter(project_id=project_id, user=user).exists():
             return services.get_project_messages(project_id)
+
+        # Discussion-only invitees see only messages they were invited to discuss
+        invited_message_ids = DiscussionParticipant.objects.filter(
+            user=user,
+            discussion__project_id=project_id,
+            discussion__related_type="message",
+        ).values_list("discussion__related_id", flat=True)
+
+        if invited_message_ids:
+            return Message.objects.filter(
+                project_id=project_id,
+                id__in=invited_message_ids,
+            )
+
         return Message.objects.none()
 
     def perform_create(self, serializer):

@@ -7,6 +7,5 @@ router.register(r"discussions", DiscussionViewSet, basename="discussions")
 
 urlpatterns = [
     path("", include(router.urls)),
-    # "My Discussions"
     path("my-discussions/", MyDiscussionsView.as_view(), name="my-discussions"),
 ]

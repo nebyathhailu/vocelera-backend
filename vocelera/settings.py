@@ -193,6 +193,8 @@ GEMINI_TEMPERATURE = 0.4
 TWILIO_ACCOUNT_SID      = env("TWILIO_ACCOUNT_SID")
 TWILIO_AUTH_TOKEN       = env("TWILIO_AUTH_TOKEN")
 TWILIO_WHATSAPP_NUMBER  = env("TWILIO_WHATSAPP_NUMBER")
+TWILIO_SANDBOX_KEYWORD = env("TWILIO_SANDBOX_KEYWORD", default="join top-everywhere")
+TWILIO_IS_SANDBOX      = env.bool("TWILIO_IS_SANDBOX", default=True)
 
 # How many new WhatsApp messages must arrive before AI insights are regenerated
 INSIGHT_TRIGGER_EVERY_N_MESSAGES = env("INSIGHT_TRIGGER_EVERY_N_MESSAGES")
